@@ -147,7 +147,7 @@ func (d *Driver) Create() error {
 		return err
 	}
 
-	log.Debugf("HACK: Downloading version of Docker with identity auth...")
+	log.Debugf("Updating /etc/default/docker to open on all interfaces...")
 
 	cmd, err := d.GetSSHCommand("stop docker")
 	if err != nil {
@@ -157,27 +157,11 @@ func (d *Driver) Create() error {
 		return err
 	}
 
-	cmd, err = d.GetSSHCommand("curl -sS https://bfirsh.s3.amazonaws.com/docker/docker-1.3.1-dev-identity-auth > /usr/bin/docker")
+	cmd, err = d.GetSSHCommand("echo 'export DOCKER_OPTS=\"--host=tcp://0.0.0.0:2375\"' >> /etc/default/docker")
 	if err != nil {
 		return err
 	}
 	if err := cmd.Run(); err != nil {
-		return err
-	}
-
-	log.Debugf("Updating /etc/default/docker to use identity auth...")
-
-	cmd, err = d.GetSSHCommand("echo 'export DOCKER_OPTS=\"--auth=identity --host=tcp://0.0.0.0:2376\"' >> /etc/default/docker")
-	if err != nil {
-		return err
-	}
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-
-	log.Debugf("Adding key to authorized-keys.d...")
-
-	if err := drivers.AddPublicKeyToAuthorizedHosts(d, "/.docker/authorized-keys.d"); err != nil {
 		return err
 	}
 
@@ -220,7 +204,7 @@ func (d *Driver) GetURL() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("tcp://%s:2376", ip), nil
+	return fmt.Sprintf("tcp://%s:2375", ip), nil
 }
 
 func (d *Driver) GetIP() (string, error) {
