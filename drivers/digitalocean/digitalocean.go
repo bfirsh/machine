@@ -27,6 +27,7 @@ type Driver struct {
 	Region      string
 	SSHKeyID    int
 	Size        string
+	Swarm       string
 	storePath   string
 }
 
@@ -64,6 +65,11 @@ func GetCreateFlags() []cli.Flag {
 			Usage:  "Digital Ocean size",
 			Value:  "512mb",
 		},
+		cli.StringFlag{
+			Name:  "swarm",
+			Usage: "Swarm token",
+			Value: "",
+		},
 	}
 }
 
@@ -80,6 +86,7 @@ func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 	d.Image = flags.String("digitalocean-image")
 	d.Region = flags.String("digitalocean-region")
 	d.Size = flags.String("digitalocean-size")
+	d.Swarm = flags.String("swarm")
 
 	if d.AccessToken == "" {
 		return fmt.Errorf("digitalocean driver requires the --digitalocean-access-token option")
@@ -171,6 +178,28 @@ func (d *Driver) Create() error {
 	}
 	if err := cmd.Run(); err != nil {
 		return err
+	}
+
+	if d.Swarm != "" {
+		log.Debugf("Downloading Swarm...")
+
+		cmd, err = d.GetSSHCommand("curl -sS https://bfirsh.s3.amazonaws.com/swarm/swarm-linux-amd64-92c045b143a97207b30bc74aaff4d7952f19da9b > /usr/bin/swarm; chmod +x /usr/bin/swarm")
+		if err != nil {
+			return err
+		}
+		if err := cmd.Run(); err != nil {
+			return err
+		}
+
+		upstartScript := fmt.Sprintf("exec swarm --debug join --discovery token://%s --addr=%s:2375", d.Swarm, d.IPAddress)
+
+		cmd, err = d.GetSSHCommand(fmt.Sprintf("echo \"%s\" > /etc/init/swarm.conf; start swarm", upstartScript))
+		if err != nil {
+			return err
+		}
+		if err := cmd.Run(); err != nil {
+			return err
+		}
 	}
 
 	return nil
