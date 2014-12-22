@@ -106,7 +106,7 @@ func GetCreateFlags() []cli.Flag {
 	}
 }
 
-func NewDriver(storePath string) (drivers.Driver, error) {
+func NewDriver(name, storePath string) (drivers.Driver, error) {
 	id := generateId()
 	return &Driver{Id: id, storePath: storePath}, nil
 }

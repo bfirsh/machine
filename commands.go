@@ -85,6 +85,16 @@ var Commands = []cli.Command{
 				),
 				Value: "none",
 			},
+			cli.IntFlag{
+				Name:  "n",
+				Usage: "Number of machines to create",
+				Value: 1,
+			},
+			cli.IntFlag{
+				Name:  "s",
+				Usage: "Number to start from",
+				Value: 1,
+			},
 		),
 		Name:  "create",
 		Usage: "Create a machine",
@@ -108,15 +118,35 @@ var Commands = []cli.Command{
 
 			store := NewStore()
 
-			host, err := store.Create(name, driver, c)
-			if err != nil {
-				log.Fatal(err)
-			}
-			if err := store.SetActive(host); err != nil {
-				log.Fatalf("error setting active host: %v", err)
-			}
+			number := c.Int("n")
+			start := c.Int("s")
 
-			log.Infof("%q has been created and is now the active machine. To point Docker at this machine, run: export DOCKER_HOST=$(machine url) DOCKER_AUTH=identity", name)
+			if number == 1 {
+				host, err := store.Create(name, driver, c)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				if err := store.SetActive(host); err != nil {
+					log.Fatalf("error setting active host: %v", err)
+				}
+
+				log.Infof("%q has been created and is now the active machine. To point Docker at this machine, run: export DOCKER_HOST=$(machine url) DOCKER_AUTH=identity", name)
+			} else {
+				log.Infof("Creating %v machines...", number)
+				var wg sync.WaitGroup
+				wg.Add(number)
+				for n := start; n <= number+start; n++ {
+					go func(n int) {
+						defer wg.Done()
+						_, err := store.Create(fmt.Sprintf("%v-%v", name, n), driver, c)
+						if err != nil {
+							log.Fatal(err)
+						}
+					}(n)
+				}
+				wg.Wait()
+			}
 		},
 	},
 	{

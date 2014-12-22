@@ -29,7 +29,7 @@ type hostConfig struct {
 }
 
 func NewHost(name, driverName, storePath string) (*Host, error) {
-	driver, err := drivers.NewDriver(driverName, storePath)
+	driver, err := drivers.NewDriver(driverName, name, storePath)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +120,7 @@ func (h *Host) LoadConfig() error {
 		return err
 	}
 
-	driver, err := drivers.NewDriver(config.DriverName, h.storePath)
+	driver, err := drivers.NewDriver(config.DriverName, h.Name, h.storePath)
 	if err != nil {
 		return err
 	}

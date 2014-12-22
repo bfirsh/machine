@@ -12,16 +12,15 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/codegangsta/cli"
 	"github.com/digitalocean/godo"
-	"github.com/docker/docker/utils"
 	"github.com/docker/machine/drivers"
 	"github.com/docker/machine/ssh"
 	"github.com/docker/machine/state"
 )
 
 type Driver struct {
+	Name        string
 	AccessToken string
 	DropletID   int
-	DropletName string
 	Image       string
 	IPAddress   string
 	Region      string
@@ -73,8 +72,8 @@ func GetCreateFlags() []cli.Flag {
 	}
 }
 
-func NewDriver(storePath string) (drivers.Driver, error) {
-	return &Driver{storePath: storePath}, nil
+func NewDriver(name, storePath string) (drivers.Driver, error) {
+	return &Driver{Name: name, storePath: storePath}, nil
 }
 
 func (d *Driver) DriverName() string {
@@ -96,8 +95,6 @@ func (d *Driver) SetConfigFromFlags(flags drivers.DriverOptions) error {
 }
 
 func (d *Driver) Create() error {
-	d.setDropletNameIfNotSet()
-
 	log.Infof("Creating SSH key...")
 
 	key, err := d.createSSHKey()
@@ -113,7 +110,7 @@ func (d *Driver) Create() error {
 
 	createRequest := &godo.DropletCreateRequest{
 		Image:   d.Image,
-		Name:    d.DropletName,
+		Name:    d.Name,
 		Region:  d.Region,
 		Size:    d.Size,
 		SSHKeys: []interface{}{d.SSHKeyID},
@@ -127,6 +124,8 @@ func (d *Driver) Create() error {
 	d.DropletID = newDroplet.Droplet.ID
 
 	for {
+		time.Sleep(30 * time.Second)
+
 		newDroplet, _, err = client.Droplets.Get(d.DropletID)
 		if err != nil {
 			return err
@@ -141,7 +140,6 @@ func (d *Driver) Create() error {
 			break
 		}
 
-		time.Sleep(1 * time.Second)
 	}
 
 	log.Debugf("Created droplet ID %d, IP address %s",
@@ -165,6 +163,14 @@ func (d *Driver) Create() error {
 	}
 
 	cmd, err = d.GetSSHCommand("echo 'export DOCKER_OPTS=\"--host=tcp://0.0.0.0:2375\"' >> /etc/default/docker")
+	if err != nil {
+		return err
+	}
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+
+	cmd, err = d.GetSSHCommand("rm -f /.docker/key.json")
 	if err != nil {
 		return err
 	}
@@ -216,7 +222,7 @@ func (d *Driver) createSSHKey() (*godo.Key, error) {
 	}
 
 	createRequest := &godo.KeyCreateRequest{
-		Name:      d.DropletName,
+		Name:      d.Name,
 		PublicKey: string(publicKey),
 	}
 
@@ -244,6 +250,9 @@ func (d *Driver) GetIP() (string, error) {
 }
 
 func (d *Driver) GetState() (state.State, error) {
+	if d.DropletID == 0 {
+		return state.None, nil
+	}
 	droplet, _, err := d.getClient().Droplets.Get(d.DropletID)
 	if err != nil {
 		return state.Error, err
@@ -314,12 +323,6 @@ func (d *Driver) Upgrade() error {
 
 func (d *Driver) GetSSHCommand(args ...string) (*exec.Cmd, error) {
 	return ssh.GetSSHCommand(d.IPAddress, 22, "root", d.sshKeyPath(), args...), nil
-}
-
-func (d *Driver) setDropletNameIfNotSet() {
-	if d.DropletName == "" {
-		d.DropletName = fmt.Sprintf("docker-host-%s", utils.GenerateRandomID())
-	}
 }
 
 func (d *Driver) getClient() *godo.Client {
